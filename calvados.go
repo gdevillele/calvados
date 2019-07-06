@@ -1,9 +1,11 @@
 package calvados
 
 import (
+	"errors"
 	"html/template"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -211,7 +213,7 @@ func (calva *Calvados) replyForPath(c *gin.Context) {
 		return
 	}
 
-	dirExistsAtResourcePath := fsutil.DirectoryExists(resourcePath)
+	dirExistsAtResourcePath := directoryExists(resourcePath)
 
 	// here, path has been cleaned and trailing '/' removed if directory not found
 	if requestPathEndsWithSlash {
@@ -219,12 +221,12 @@ func (calva *Calvados) replyForPath(c *gin.Context) {
 		if dirExistsAtResourcePath {
 			// - request path ends with a '/'
 			// - a directory exists at that path
-			if mdIndexPath := filepath.Join(resourcePath, "index.md"); fsutil.RegularFileExists(mdIndexPath) {
+			if mdIndexPath := filepath.Join(resourcePath, "index.md"); regularFileExists(mdIndexPath) {
 				// - directory exists
 				// - child index.md file found
 				// > render that file
 				resourcePath = mdIndexPath
-			} else if htmlIndexPath := filepath.Join(resourcePath, "index.html"); fsutil.RegularFileExists(htmlIndexPath) {
+			} else if htmlIndexPath := filepath.Join(resourcePath, "index.html"); regularFileExists(htmlIndexPath) {
 				// - directory exists
 				// - child index.md file not found
 				// - child index.html file found
@@ -257,13 +259,13 @@ func (calva *Calvados) replyForPath(c *gin.Context) {
 		}
 	} else {
 		// request path doesn't end with a '/'
-		if fsutil.RegularFileExists(resourcePath) {
+		if regularFileExists(resourcePath) {
 			// request path points to an existing file
 			replyFile(c, resourcePath)
 			return
 		} else {
 			// request path doesn't point to a regular file
-			if mdResource := resourcePath + ".md"; fsutil.RegularFileExists(mdResource) {
+			if mdResource := resourcePath + ".md"; regularFileExists(mdResource) {
 				// try adding ".md" to the resource path
 				resourcePath = mdResource
 			} else if dirExistsAtResourcePath {
@@ -341,7 +343,7 @@ func (calva *Calvados) ReplyMardown(c *gin.Context, httpStatus int, resourcePath
 		pageMdContent = md
 		// find title in frontmatter
 		if titleIface, ok := pageFrontmatter["title"]; ok {
-			titleStr, err := interfaceConv.ToString(titleIface)
+			titleStr, err := toString(titleIface)
 			if err != nil {
 				logrus.Println("ERROR: frontmatter title value is not a string.")
 			} else {
@@ -350,7 +352,7 @@ func (calva *Calvados) ReplyMardown(c *gin.Context, httpStatus int, resourcePath
 		}
 		// find keywords in frontmatter
 		if keywordsIface, ok := pageFrontmatter["keywords"]; ok {
-			keywordsStr, err := interfaceConv.ToString(keywordsIface)
+			keywordsStr, err := toString(keywordsIface)
 			if err != nil {
 				logrus.Println("ERROR: frontmatter keywords value is not a string")
 			} else {
@@ -359,7 +361,7 @@ func (calva *Calvados) ReplyMardown(c *gin.Context, httpStatus int, resourcePath
 		}
 		// find description in frontmatter
 		if descriptionIface, ok := pageFrontmatter["description"]; ok {
-			descriptionStr, err := interfaceConv.ToString(descriptionIface)
+			descriptionStr, err := toString(descriptionIface)
 			if err != nil {
 				logrus.Println("ERROR: frontmatter description value is not a string")
 			} else {
@@ -368,7 +370,7 @@ func (calva *Calvados) ReplyMardown(c *gin.Context, httpStatus int, resourcePath
 		}
 		// find template in frontmatter
 		if templateIface, ok := pageFrontmatter["template"]; ok {
-			templateStr, err := interfaceConv.ToString(templateIface)
+			templateStr, err := toString(templateIface)
 			if err != nil {
 				logrus.Println("ERROR: frontmatter template value is not a string")
 			} else {
@@ -415,7 +417,7 @@ func (calva *Calvados) MWAddSecurityHTTPHeaders(c *gin.Context) {
 	c.Header("X-Content-Type-Options", "nosniff")
 }
 
-// returns a middleware that sends a 404 response if the request concerns a
+// MWCheckForUnexposedPath returns a middleware that sends a 404 response if the request concerns a
 // resource that is not exposed. (if one of the path components starts with '_')
 func (calva *Calvados) MWCheckForUnexposedPath(c *gin.Context) {
 	path := c.Request.URL.String()    // "/style/main.css"
@@ -434,11 +436,18 @@ func (calva *Calvados) MWCheckForUnexposedPath(c *gin.Context) {
 ///
 ////////////////////////////////////////////////////////////
 
+func toString(i interface{}) (string, error) {
+	if str, ok := i.(string); ok {
+		return str, nil
+	}
+	return "", errors.New("interface is not a string")
+}
+
 // splitPath takes a '/' separated path and
 // returns a slice containing the path elements
 // TODO: gdevillele: mabye use filepath.Split
 func splitPath(path string) []string {
-	var result []string = make([]string, 0)
+	result := make([]string, 0)
 	for {
 		if len(path) == 0 {
 			break
@@ -462,4 +471,24 @@ func cleanPath(path string) string {
 		path = strings.TrimSuffix(path, "index")
 	}
 	return path
+}
+
+func regularFileExists(absPath string) bool {
+	fd, err := os.Open(absPath)
+	if err != nil {
+		return false
+	}
+	fi, err := fd.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.IsDir() == false
+}
+
+func directoryExists(absPath string) bool {
+	s, err := os.Stat(absPath)
+	if err != nil {
+		return false
+	}
+	return s.IsDir()
 }
