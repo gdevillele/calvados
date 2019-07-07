@@ -408,7 +408,7 @@ func (calva *Calvados) ReplyMardown(c *gin.Context, httpStatus int, resourcePath
 // Adds the security HTTP headers to all HTTP responses
 func (calva *Calvados) MWAddSecurityHTTPHeaders(c *gin.Context) {
 	// add CSP header to HTTP responses
-	c.Header("Content-Security-Policy", "script-src 'self'")
+	c.Header("Content-Security-Policy", "script-src 'self' 'unsafe-inline'")
 	// add X-Frame-Options header to HTTP responses
 	c.Header("X-Frame-Options", "DENY")
 	// add X-XSS-Protection header to HTTP responses
